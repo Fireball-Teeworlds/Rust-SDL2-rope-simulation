@@ -1,4 +1,4 @@
-extern crate sdl2; 
+extern crate sdl2;
 
 use sdl2::event::Event;
 use sdl2::gfx::primitives::DrawRenderer;
@@ -6,8 +6,8 @@ use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::render::Canvas;
 use sdl2::video::Window;
+use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 use std::time::Duration;
-use std::ops::{Add,AddAssign,Div,Mul,Sub,SubAssign};
 
 const ZERO_THRESHOLD: f64 = 0.00001;
 
@@ -21,7 +21,7 @@ struct Vec2 {
 }
 
 impl Vec2 {
-    const ZERO: Vec2 = Vec2 {x: 0.0, y: 0.0};
+    const ZERO: Vec2 = Vec2 { x: 0.0, y: 0.0 };
 
     fn length(self) -> f64 {
         (self.x.powf(2.0) + self.y.powf(2.0)).sqrt()
@@ -58,9 +58,15 @@ impl Vec2 {
     fn rotated90(self, cw: bool) -> Vec2 {
         let invert_x_for_ccw = (self.x < 0.0) ^ (self.y < 0.0);
         if invert_x_for_ccw ^ cw {
-            Vec2 {x: self.y * -1.0, y: self.x}
+            Vec2 {
+                x: self.y * -1.0,
+                y: self.x,
+            }
         } else {
-            Vec2 {x: self.y, y: self.x * -1.0}
+            Vec2 {
+                x: self.y,
+                y: self.x * -1.0,
+            }
         }
     }
 }
@@ -101,7 +107,10 @@ impl Div<f64> for Vec2 {
     type Output = Self;
 
     fn div(self, rhs: f64) -> Vec2 {
-        Vec2 {x: self.x / rhs, y: self.y / rhs}
+        Vec2 {
+            x: self.x / rhs,
+            y: self.y / rhs,
+        }
     }
 }
 
@@ -109,7 +118,10 @@ impl Mul<f64> for Vec2 {
     type Output = Self;
 
     fn mul(self, rhs: f64) -> Vec2 {
-        Vec2 {x: self.x * rhs, y: self.y * rhs}
+        Vec2 {
+            x: self.x * rhs,
+            y: self.y * rhs,
+        }
     }
 }
 
@@ -130,7 +142,9 @@ impl RopeSegment {
 
     fn apply_force_to_linked_segment(&self, linked: &mut RopeSegment) {
         let pull = (self.pos - linked.pos).length_sub(Self::LENGTH);
-        if pull.length() < ZERO_THRESHOLD { return; }
+        if pull.length() < ZERO_THRESHOLD {
+            return;
+        }
         let spring_speed = (self.speed - linked.speed).project_onto(pull);
         let spring_damping = spring_speed * Self::DAMPING;
         let pull_dampened = pull + spring_damping;
@@ -150,7 +164,7 @@ impl RopeSegment {
         }
         self.force = self.force.length_clamped(FORCE_CAP);
         self.speed += self.force / Self::MASS;
-        if ! friction_applied {
+        if !friction_applied {
             self.speed = self.speed.length_sub(Self::KINETIC_FRICTION / Self::MASS);
         }
         self.speed = self.speed.length_clamped(SPEED_CAP);
@@ -176,11 +190,14 @@ impl Rope {
                 force: Vec2::ZERO,
             });
         }
-        Rope {cursor: pos, segments}
+        Rope {
+            cursor: pos,
+            segments,
+        }
     }
 
     fn pull(&mut self, x: f64, y: f64) {
-        self.cursor += Vec2 {x, y};
+        self.cursor += Vec2 { x, y };
     }
 
     fn tick(&mut self) {
@@ -191,10 +208,10 @@ impl Rope {
         for i in 0..self.segments.len() {
             if i != 0 {
                 let (left, right) = self.segments.split_at_mut(i);
-                right[0].apply_force_to_linked_segment(&mut left[i-1]);
+                right[0].apply_force_to_linked_segment(&mut left[i - 1]);
             }
             if i != self.segments.len() - 1 {
-                let (left, right) = self.segments.split_at_mut(i+1);
+                let (left, right) = self.segments.split_at_mut(i + 1);
                 left[i].apply_force_to_linked_segment(&mut right[0]);
             }
         }
@@ -204,39 +221,47 @@ impl Rope {
     }
 
     fn draw(&self, canvas: &mut Canvas<Window>) {
+        canvas
+            .filled_circle(
+                self.cursor.x.round() as i16,
+                self.cursor.y.round() as i16,
+                (Self::DRAW_WIDTH / 1.5) as i16,
+                Color::BLACK,
+            )
+            .unwrap();
+
         for s in &self.segments {
-            canvas.filled_circle(
-                s.pos.x as i16,
-                s.pos.y as i16,
-                (Self::DRAW_WIDTH / 2.0) as i16,
-                Color::WHITE,
-            ).unwrap();
+            canvas
+                .filled_circle(
+                    s.pos.x as i16,
+                    s.pos.y as i16,
+                    (Self::DRAW_WIDTH / 2.0) as i16,
+                    Color::WHITE,
+                )
+                .unwrap();
         }
         for segments in self.segments[..].windows(2) {
             if let [s1, s2] = segments {
                 if (s2.pos - s1.pos).length() < ZERO_THRESHOLD {
                     continue;
                 }
-                let s1norm = (s2.pos - s1.pos).normalized().rotated90(true) * (Self::DRAW_WIDTH / 2.0);
-                let s2norm = (s1.pos - s2.pos).normalized().rotated90(false) * (Self::DRAW_WIDTH / 2.0);
+                let s1norm =
+                    (s2.pos - s1.pos).normalized().rotated90(true) * (Self::DRAW_WIDTH / 2.0);
+                let s2norm =
+                    (s1.pos - s2.pos).normalized().rotated90(false) * (Self::DRAW_WIDTH / 2.0);
                 let s1a = s1.pos + s1norm;
                 let s1b = s1.pos - s1norm;
                 let s2a = s2.pos + s2norm;
                 let s2b = s2.pos - s2norm;
-                canvas.filled_polygon(
-                    &[s1a.x as i16, s1b.x as i16, s2b.x as i16, s2a.x as i16],
-                    &[s1a.y as i16, s1b.y as i16, s2b.y as i16, s2a.y as i16],
-                    Color::WHITE,
-                ).unwrap();
+                canvas
+                    .filled_polygon(
+                        &[s1a.x as i16, s1b.x as i16, s2b.x as i16, s2a.x as i16],
+                        &[s1a.y as i16, s1b.y as i16, s2b.y as i16, s2a.y as i16],
+                        Color::WHITE,
+                    )
+                    .unwrap();
             }
         }
-
-        canvas.filled_circle(
-            self.cursor.x.round() as i16,
-            self.cursor.y.round() as i16,
-            10,
-            Color::BLACK,
-        ).unwrap();
     }
 }
 
@@ -246,27 +271,36 @@ fn main() {
 
     sdl_context.mouse().set_relative_mouse_mode(true);
 
-    let window = video_subsystem.window("Rope", 0, 0)
-        .fullscreen_desktop()
-        .build()
-        .unwrap();
-    let mut canvas = window.into_canvas().present_vsync().build().unwrap();
- 
+    let mut canvas = {
+        let window = video_subsystem
+            .window("Rope", 0, 0)
+            .fullscreen_desktop()
+            .build()
+            .unwrap();
+        window.into_canvas().present_vsync().build().unwrap()
+    };
+
     let mut event_pump = sdl_context.event_pump().unwrap();
 
-    let mut rope = Rope::new(40, Vec2 {x: 300.0, y: 300.0});
+    let (windowx, windowy) = canvas.window().size();
+    let mut rope = Rope::new(
+        40,
+        Vec2 {
+            x: (windowx / 2) as f64,
+            y: (windowy / 2) as f64,
+        },
+    );
     'running: loop {
-        canvas.set_draw_color(Color::GREY);
-        canvas.clear();
         for event in event_pump.poll_iter() {
             match event {
-                Event::Quit {..} |
-                Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
-                    break 'running
-                },
+                Event::Quit { .. }
+                | Event::KeyDown {
+                    keycode: Some(Keycode::Escape),
+                    ..
+                } => break 'running,
                 Event::MouseMotion { xrel, yrel, .. } => {
-                    rope.pull(f64::from(xrel), f64::from(yrel));
-                },
+                    rope.pull(f64::from(xrel) / 2.0, f64::from(yrel) / 2.0);
+                }
                 _ => {}
             }
         }
@@ -274,8 +308,11 @@ fn main() {
             rope.tick();
         }
 
+        canvas.set_draw_color(Color::GREY);
+        canvas.clear();
         rope.draw(&mut canvas);
         canvas.present();
+
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
     }
 }
