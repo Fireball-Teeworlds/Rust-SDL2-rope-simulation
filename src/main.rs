@@ -196,10 +196,6 @@ impl Rope {
         }
     }
 
-    fn pull(&mut self, x: f64, y: f64) {
-        self.cursor += Vec2 { x, y };
-    }
-
     fn tick(&mut self) {
         let diff = self.cursor - self.segments[0].pos;
         if diff.length() > ZERO_THRESHOLD {
@@ -265,7 +261,71 @@ impl Rope {
     }
 }
 
+struct InputAggregator {
+    window_size: Vec2,
+    active_finger: Option<i64>,
+    cursor: Vec2,
+}
+
+impl InputAggregator {
+    const MOUSE_SENSITIVITY: f64 = 0.5;
+
+    pub fn new(window_size: Vec2) -> InputAggregator {
+        InputAggregator {
+            window_size,
+            active_finger: None,
+            cursor: window_size / 2.0,
+        }
+    }
+
+    pub fn process_event(&mut self, event: Event) {
+        if let Some(active_finger_id) = self.active_finger {
+            match event {
+                Event::FingerMotion {
+                    finger_id, x, y, ..
+                } if finger_id == active_finger_id => {
+                    self.set_cursor_from_finger_position(x, y);
+                }
+                Event::FingerUp {
+                    finger_id, x, y, ..
+                } if finger_id == active_finger_id => {
+                    self.active_finger = None;
+                    self.set_cursor_from_finger_position(x, y);
+                }
+                _ => {}
+            }
+        } else {
+            match event {
+                Event::FingerDown {
+                    finger_id, x, y, ..
+                } => {
+                    self.active_finger = Some(finger_id);
+                    self.set_cursor_from_finger_position(x, y);
+                }
+                Event::MouseMotion { xrel, yrel, .. } => {
+                    self.cursor += Vec2 {
+                        x: xrel.into(),
+                        y: yrel.into(),
+                    } * Self::MOUSE_SENSITIVITY;
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn set_cursor_from_finger_position(&mut self, x: f32, y: f32) {
+        // Finger positions are always in range of 0..1
+        self.cursor = Vec2 {
+            x: x as f64 * self.window_size.x,
+            y: y as f64 * self.window_size.y,
+        };
+    }
+}
+
 fn main() {
+    sdl2::hint::set("SDL_HINT_TOUCH_MOUSE_EVENTS", "0");
+    sdl2::hint::set("SDL_HINT_MOUSE_TOUCH_EVENTS", "0");
+
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
 
@@ -282,14 +342,15 @@ fn main() {
 
     let mut event_pump = sdl_context.event_pump().unwrap();
 
-    let (windowx, windowy) = canvas.window().size();
-    let mut rope = Rope::new(
-        40,
-        Vec2 {
-            x: (windowx / 2) as f64,
-            y: (windowy / 2) as f64,
-        },
-    );
+    let mut input_aggregator = {
+        let (x, y) = canvas.window().size();
+        InputAggregator::new(Vec2 {
+            x: x.into(),
+            y: y.into(),
+        })
+    };
+    let mut rope = Rope::new(40, input_aggregator.cursor);
+
     'running: loop {
         for event in event_pump.poll_iter() {
             match event {
@@ -298,11 +359,9 @@ fn main() {
                     keycode: Some(Keycode::Escape),
                     ..
                 } => break 'running,
-                Event::MouseMotion { xrel, yrel, .. } => {
-                    rope.pull(f64::from(xrel) / 2.0, f64::from(yrel) / 2.0);
-                }
-                _ => {}
+                other_event => input_aggregator.process_event(other_event),
             }
+            rope.cursor = input_aggregator.cursor;
         }
         for _ in 0..15 {
             rope.tick();
